@@ -38,7 +38,7 @@ async function toPngBase64(src: string): Promise<string> {
   c.width = img.naturalWidth || 800;
   c.height = img.naturalHeight || 340;
   c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL("image/png").split(",")[1];
+  return c.toDataURL("image/png").split(",")[1] ?? "";
 }
 
 type Verdict = { compartment: string; verdict: "taken" | "still full" | "mismatch"; note?: string };
