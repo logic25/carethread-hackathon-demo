@@ -35,6 +35,16 @@ export const samSegment = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }): Promise<SamResult> => {
+    try {
+      const r = await samSegmentInner(data);
+      return JSON.parse(JSON.stringify(r)) as SamResult;
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  });
+
+async function samSegmentInner(data: SamInput): Promise<SamResult> {
+  {
     const key = process.env["META_API_KEY"];
     if (!key) return { ok: false, error: "META_API_KEY is not set on the server." };
     const res = await fetch("https://api.meta.ai/v1/responses", {
