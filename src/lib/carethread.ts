@@ -63,7 +63,7 @@ export async function callMeta(model: "muse-spark-1.3" | "sam-3.1", content: Par
 
 export function extractJson<T>(text: string): T {
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const body = m ? m[1] : text;
+  const body = (m ? m[1] : text) ?? "";
   const start = body.search(/[[{]/);
   const end = Math.max(body.lastIndexOf("}"), body.lastIndexOf("]"));
   return JSON.parse(body.slice(start, end + 1)) as T;

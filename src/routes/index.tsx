@@ -138,7 +138,7 @@ function Index() {
 
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
               {COMMITMENTS.map((c) => {
-                const st = statuses[c.id];
+                const st: Status = statuses[c.id] ?? "On track";
                 const dec = decide(votes[c.id]);
                 const ai = loop.items.find((i) => Number(i.id) === c.id);
                 return (
