@@ -85,10 +85,28 @@ export function PillCheck() {
         image,
         { type: "text", text: `${samLine}\n\nMedication list (AM pills go in AM compartments, PM in PM): ${MED_LIST.join(", ")}. Today is Thursday evening. For every compartment decide: "taken" (empty and its time has passed), "still full" (holds the right pills), or "mismatch" (wrong count/missing pill, or full when it should have been taken). Reply ONLY JSON: [{"compartment":"Sun AM","verdict":"taken","note":"..."}]` },
       ]);
-      setRows(extractJson<Verdict[]>(out));
+      const parsed = extractJson<unknown>(out);
+      const list: unknown[] = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object"
+          ? ((Object.values(parsed as Record<string, unknown>).find(Array.isArray) as unknown[] | undefined) ?? [])
+          : [];
+      const safe: Verdict[] = list
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+        .map((r) => {
+          const v = String(r["verdict"] ?? "").toLowerCase();
+          return {
+            compartment: String(r["compartment"] ?? "?"),
+            verdict: (v === "taken" || v === "mismatch" ? v : "still full") as Verdict["verdict"],
+            ...(r["note"] != null ? { note: typeof r["note"] === "string" ? r["note"] : JSON.stringify(r["note"]) } : {}),
+          };
+        });
+      if (safe.length === 0) throw new Error("Muse Spark didn't return a readable verdict. Please try again.");
+      setRows(safe);
       setState("done");
     } catch (e) {
-      { setErr(e instanceof Error ? e.message : String(e)); setState("error"); }
+      setErr(e instanceof Error ? e.message : String(e));
+      setState("error");
     }
   };
 
@@ -122,10 +140,10 @@ export function PillCheck() {
             <h3 className="text-lg font-bold">Verdict</h3>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {rows.map((r) => (
-                <div key={r.compartment} title={r.note} className={`rounded-xl p-3 text-sm ${r.verdict === "taken" ? "bg-success text-success-foreground" : r.verdict === "mismatch" ? "bg-destructive text-destructive-foreground" : "bg-warning text-warning-foreground"}`}>
-                  <div className="font-bold">{r.compartment}</div>
-                  <div className="capitalize">{r.verdict}</div>
-                  {r.note && <div className="mt-1 text-xs opacity-80">{r.note}</div>}
+                <div key={r["compartment"]} title={r["note"]} className={`rounded-xl p-3 text-sm ${r["verdict"] === "taken" ? "bg-success text-success-foreground" : r["verdict"] === "mismatch" ? "bg-destructive text-destructive-foreground" : "bg-warning text-warning-foreground"}`}>
+                  <div className="font-bold">{r["compartment"]}</div>
+                  <div className="capitalize">{r["verdict"]}</div>
+                  {r["note"] && <div className="mt-1 text-xs opacity-80">{r["note"]}</div>}
                 </div>
               ))}
             </div>
