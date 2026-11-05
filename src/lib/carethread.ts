@@ -39,8 +39,8 @@ import { metaProxy } from "./meta.functions";
 
 type Part = { type: "text"; text: string } | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
-export async function callMeta(model: "muse-spark-1.3" | "sam-3.1", content: Part[], system?: string): Promise<string> {
-  const r = await metaProxy({ data: { model, system, messages: [{ role: "user", content }] } });
+export async function callMeta(model: "muse-spark-1.3" | "sam-3.1", content: Part[], system?: string, maxTokens?: number): Promise<string> {
+  const r = await metaProxy({ data: { model, system, maxTokens, messages: [{ role: "user", content }] } });
   if (!r.ok) throw new Error(r.error);
   let json: any;
   try { json = JSON.parse(r.json); } catch { return r.json; }
@@ -57,7 +57,20 @@ export function extractJson<T>(text: string): T {
   const body = (m ? m[1] : text) ?? "";
   const start = body.search(/[[{]/);
   const end = Math.max(body.lastIndexOf("}"), body.lastIndexOf("]"));
-  return JSON.parse(body.slice(start, end + 1)) as T;
+  const sliced = body.slice(start, end + 1);
+  try {
+    return JSON.parse(sliced) as T;
+  } catch (e) {
+    // Truncated array: trim back to the last complete object and close it.
+    const tail = body.slice(start);
+    if (tail.startsWith("[")) {
+      const cut = tail.lastIndexOf("},");
+      if (cut > 0) return JSON.parse(tail.slice(0, cut + 1) + "]") as T;
+      const lastObj = tail.lastIndexOf("}");
+      if (lastObj > 0) return JSON.parse(tail.slice(0, lastObj + 1) + "]") as T;
+    }
+    throw e;
+  }
 }
 
 export function boardSummary(statuses: Record<number, Status>) {

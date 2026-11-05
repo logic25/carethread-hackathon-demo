@@ -70,7 +70,7 @@ function Index() {
   const runLoop = async () => {
     setLoop({ s: "loading", items: [], err: "" });
     try {
-      const t = await callMeta("muse-spark-1.3", [{ type: "text", text: `You are Cora, running a follow-through check on a family care board for Rosa (78), coordinated by siblings Ana, Miguel and Carla.\n${boardSummary(statuses)}\n\nFor EACH commitment return what changed since the last check, what is blocking it, and the single next question to ask the family. Reply ONLY JSON: [{"id":1,"changed":"...","blocking":"...","question":"..."}]` }]);
+      const t = await callMeta("muse-spark-1.3", [{ type: "text", text: `You are Cora, running a follow-through check on a family care board for Rosa (78), coordinated by siblings Ana, Miguel and Carla.\n${boardSummary(statuses)}\n\nFor EACH commitment return what changed since the last check, what is blocking it, and the single next question to ask the family. Use short phrases (under 15 words each). Reply ONLY compact JSON on one line, no prose or code fences outside the JSON: [{"id":1,"changed":"...","blocking":"...","question":"..."}]` }], undefined, 4000);
       setLoop({ s: "done", items: extractJson<LoopItem[]>(t), err: "" });
     } catch (e) {
       setLoop({ s: "error", items: [], err: e instanceof Error ? e.message : String(e) });
