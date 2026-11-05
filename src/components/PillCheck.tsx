@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { callMeta, extractJson, MED_LIST, NoKeyError } from "@/lib/carethread";
-import { KeyNeeded, ErrorBox } from "@/components/States";
+import { callMeta, extractJson, MED_LIST } from "@/lib/carethread";
+import { ErrorBox } from "@/components/States";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // fictional sample: Sun–Wed taken, Thu AM still full, Thu PM missing Donepezil, Fri/Sat full
@@ -96,7 +96,6 @@ export function PillCheck() {
           <ul className="mt-2 space-y-1">{MED_LIST.map((m) => <li key={m}>• {m}</li>)}</ul>
         </div>
         {state === "loading" && <div className="rounded-3xl bg-card p-6 shadow-soft text-muted-foreground animate-pulse">{step}</div>}
-        {state === "nokey" && <KeyNeeded />}
         {state === "error" && <ErrorBox message={err} />}
         {state === "done" && (
           <div className="rounded-3xl bg-card p-6 shadow-soft">

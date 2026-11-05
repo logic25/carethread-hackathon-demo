@@ -35,24 +35,15 @@ export function baseStatus(days: number): Status {
 export const MED_LIST = ["Metoprolol — AM", "Lisinopril — AM", "Vitamin D — AM", "Donepezil — PM"];
 
 // ---- Meta Model API ----
-const KEY = "carethread.metaKey";
-export const getKey = () => (typeof window === "undefined" ? "" : localStorage.getItem(KEY) || "");
-export const setKey = (k: string) => (k ? localStorage.setItem(KEY, k) : localStorage.removeItem(KEY));
-
-export class NoKeyError extends Error {}
+import { metaProxy } from "./meta.functions";
 
 type Part = { type: "text"; text: string } | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
 export async function callMeta(model: "muse-spark-1.3" | "sam-3.1", content: Part[], system?: string): Promise<string> {
-  const key = getKey();
-  if (!key) throw new NoKeyError("No API key");
-  const res = await fetch("https://api.meta.ai/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model, max_tokens: 2000, ...(system ? { system } : {}), messages: [{ role: "user", content }] }),
-  });
-  if (!res.ok) throw new Error(`Meta Model API returned ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const json = await res.json();
+  const r = await metaProxy({ data: { model, system, messages: [{ role: "user", content }] } });
+  if (!r.ok) throw new Error(r.error);
+  let json: any;
+  try { json = JSON.parse(r.json); } catch { return r.json; }
   const text =
     (Array.isArray(json.content) ? json.content.map((c: { text?: string }) => c.text ?? "").join("") : "") ||
     json.choices?.[0]?.message?.content ||
