@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Settings, Check, X, Sparkles, RefreshCw } from "lucide-react";
 import {
-  COMMITMENTS, SIBLINGS, baseStatus, boardSummary, callMeta, extractJson, getKey, setKey, NoKeyError,
+  COMMITMENTS, SIBLINGS, baseStatus, boardSummary, callMeta, extractJson,
   type Sibling, type Status,
 } from "@/lib/carethread";
 import { PillCheck } from "@/components/PillCheck";
-import { KeyNeeded, ErrorBox } from "@/components/States";
+import { ErrorBox } from "@/components/States";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -41,8 +41,6 @@ function Index() {
   const [tab, setTab] = useState<"board" | "ledger" | "pills">("board");
   const [votes, setVotes] = useState<Votes>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [hasKey, setHasKey] = useState(false);
-  useEffect(() => setHasKey(!!getKey()), [settingsOpen]);
 
   const statuses = useMemo(() => {
     const s: Record<number, Status> = {};
@@ -65,7 +63,7 @@ function Index() {
       const t = await callMeta("muse-spark-1.3", [{ type: "text", text: `You are Cora, a calm family care coordinator. Here is the family's care board for Rosa (78):\n${boardSummary(statuses)}\n\nReturn ONE warm, plain sentence (max 35 words) that is the family's whole plan for this week. Return only the sentence.` }]);
       setSentence({ s: "done", text: t.trim().replace(/^"|"$/g, "") });
     } catch (e) {
-      setSentence(e instanceof NoKeyError ? { s: "nokey", text: "" } : { s: "error", text: e instanceof Error ? e.message : String(e) });
+      setSentence({ s: "error", text: e instanceof Error ? e.message : String(e) });
     }
   };
 
@@ -75,7 +73,7 @@ function Index() {
       const t = await callMeta("muse-spark-1.3", [{ type: "text", text: `You are Cora, running a follow-through check on a family care board for Rosa (78), coordinated by siblings Ana, Miguel and Carla.\n${boardSummary(statuses)}\n\nFor EACH commitment return what changed since the last check, what is blocking it, and the single next question to ask the family. Reply ONLY JSON: [{"id":1,"changed":"...","blocking":"...","question":"..."}]` }]);
       setLoop({ s: "done", items: extractJson<LoopItem[]>(t), err: "" });
     } catch (e) {
-      setLoop(e instanceof NoKeyError ? { s: "nokey", items: [], err: "" } : { s: "error", items: [], err: e instanceof Error ? e.message : String(e) });
+      setLoop({ s: "error", items: [], err: e instanceof Error ? e.message : String(e) });
     }
   };
 
@@ -92,7 +90,7 @@ function Index() {
           </div>
           <button aria-label="Settings" onClick={() => setSettingsOpen(true)} className="relative rounded-full p-3 hover:bg-muted">
             <Settings className="h-6 w-6" />
-            <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${hasKey ? "bg-success-foreground" : "bg-accent"}`} />
+            <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-success-foreground`} />
           </button>
         </div>
       </header>
@@ -123,7 +121,6 @@ function Index() {
               ) : (
                 <p className="mt-4 font-display text-2xl opacity-70">Muse Spark reads the whole board and returns the family's plan for the week in a single sentence.</p>
               )}
-              {sentence.s === "nokey" && <div className="mt-4 text-foreground"><KeyNeeded /></div>}
               {sentence.s === "error" && <div className="mt-4 text-foreground"><ErrorBox message={sentence.text} /></div>}
             </section>
 
@@ -133,7 +130,6 @@ function Index() {
                 <RefreshCw className={`h-4 w-4 ${loop.s === "loading" ? "animate-spin" : ""}`} /> {loop.s === "loading" ? "Running the loop…" : "Run the loop"}
               </button>
             </div>
-            {loop.s === "nokey" && <KeyNeeded />}
             {loop.s === "error" && <ErrorBox message={loop.err} />}
 
             <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -227,21 +223,13 @@ function Index() {
 }
 
 function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const [val, setVal] = useState("");
-  const saved = !!getKey();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-3xl bg-card p-7 shadow-soft" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-2xl font-bold">Connect Meta Model API</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Your key stays in this browser and is never shown again after saving.</p>
-        <p className="mt-4 text-sm font-semibold">{saved ? "✓ A key is saved." : "No key saved yet."}</p>
-        <input type="password" autoComplete="off" value={val} onChange={(e) => setVal(e.target.value)} placeholder={saved ? "Paste a new key to replace" : "Paste your API key"} className="mt-2 w-full rounded-2xl border border-input bg-background px-4 py-3 outline-none focus:ring-2 focus:ring-ring" />
-        <div className="mt-5 flex justify-between gap-2">
-          {saved ? <button onClick={() => { setKey(""); onClose(); }} className="rounded-full px-4 py-2 font-semibold text-destructive hover:bg-muted">Remove key</button> : <span />}
-          <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-full px-4 py-2 font-semibold hover:bg-muted">Cancel</button>
-            <button disabled={!val.trim()} onClick={() => { setKey(val.trim()); onClose(); }} className="rounded-full bg-primary px-5 py-2 font-bold text-primary-foreground disabled:opacity-50">Save key</button>
-          </div>
+        <h2 className="text-2xl font-bold">Settings</h2>
+        <p className="mt-3 text-muted-foreground">Meta Model API runs through a secure server proxy. No key is stored in your browser.</p>
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className="rounded-full bg-primary px-5 py-2 font-bold text-primary-foreground">Close</button>
         </div>
       </div>
     </div>
