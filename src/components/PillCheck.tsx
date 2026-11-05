@@ -42,7 +42,32 @@ async function toPngBase64(src: string): Promise<string> {
   return c.toDataURL("image/png").split(",")[1] ?? "";
 }
 
+const COMPARTMENTS = DAYS.flatMap((d) => [`${d} AM`, `${d} PM`]);
+const norm = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "");
+
 type Verdict = { compartment: string; verdict: "taken" | "still full" | "mismatch"; note?: string };
+
+// Returns 14 rows in compartment order, or null if the answer doesn't cover all compartments.
+function toRows(text: string): Verdict[] | null {
+  let parsed: unknown;
+  try { parsed = extractJson<unknown>(text); } catch { return null; }
+  if (!Array.isArray(parsed)) return null;
+  const byName = new Map<string, Verdict>();
+  for (const r of parsed) {
+    if (!r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o["compartment"] !== "string") continue;
+    const name = COMPARTMENTS.find((c) => norm(c) === norm(o["compartment"] as string));
+    if (!name) continue;
+    const v = String(o["verdict"] ?? "").toLowerCase().trim();
+    const verdict = v === "taken" || v === "mismatch" || v === "still full" ? v : v.includes("full") ? "still full" : null;
+    if (!verdict) continue;
+    const note = o["note"];
+    byName.set(name, { compartment: name, verdict, ...(note != null && note !== "" ? { note: typeof note === "string" ? note : JSON.stringify(note) } : {}) });
+  }
+  if (byName.size !== COMPARTMENTS.length) return null;
+  return COMPARTMENTS.map((c) => byName.get(c)!);
+}
 
 export function PillCheck() {
   const [src, setSrc] = useState(SAMPLE_URL);
@@ -51,7 +76,8 @@ export function PillCheck() {
   const [err, setErr] = useState("");
   const [step, setStep] = useState("");
   const [rows, setRows] = useState<Verdict[]>([]);
-  const [sam, setSam] = useState<{ pills: number; comps: number } | { error: string } | null>(null);
+  const [sam, setSam] = useState<{ pills: number } | { error: string } | null>(null);
+  const [raw, setRaw] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const run = async () => {
@@ -60,49 +86,36 @@ export function PillCheck() {
     try {
       const data = await toPngBase64(src);
       const image = { type: "image" as const, source: { type: "base64" as const, media_type: "image/png", data } };
-      setStep("SAM 3.1 is segmenting the compartments…");
+      setStep("SAM 3.1 is finding the pills…");
       const imageDataUrl = "data:image/png;base64," + data;
       let samLine = "";
       try {
         const pills = await samSegment({ data: { imageDataUrl, concept: "pill" } });
         if (!pills.ok) throw new Error(pills.error);
-        const comps = await samSegment({ data: { imageDataUrl, concept: "pill organizer compartment" } });
-        if (!comps.ok) throw new Error(comps.error);
-        if (pills.count === -1 || comps.count === -1) {
-          const raw = [pills, comps].map((r) => ("rawText" in r ? r.rawText : `${r.count} regions`)).join("\n");
-          samLine = `SAM 3.1 segmentation (Responses API) raw output:\n${raw.slice(0, 4000)}`;
-          setSam({ pills: pills.count, comps: comps.count });
+        if (pills.count === -1) {
+          samLine = `SAM 3.1 segmentation (Responses API) raw output:\n${("rawText" in pills ? pills.rawText : "").slice(0, 4000)}`;
         } else {
-          samLine = `SAM 3.1 segmentation (Responses API): found ${pills.count} pill regions and ${comps.count} organizer compartments.`;
-          setSam({ pills: pills.count, comps: comps.count });
+          samLine = `SAM 3.1 segmentation (Responses API): found ${pills.count} pill regions.`;
         }
+        setSam({ pills: pills.count });
       } catch (e) {
         setSam({ error: e instanceof Error ? e.message : String(e) });
         samLine = "SAM 3.1 segmentation was unavailable for this image.";
       }
       setStep("Muse Spark is reading each compartment…");
-      const out = await callMeta("muse-spark-1.3", [
-        image,
-        { type: "text", text: `${samLine}\n\nMedication list (AM pills go in AM compartments, PM in PM): ${MED_LIST.join(", ")}. Today is Thursday evening. For every compartment decide: "taken" (empty and its time has passed), "still full" (holds the right pills), or "mismatch" (wrong count/missing pill, or full when it should have been taken). Reply ONLY JSON: [{"compartment":"Sun AM","verdict":"taken","note":"..."}]` },
-      ]);
-      const parsed = extractJson<unknown>(out);
-      const list: unknown[] = Array.isArray(parsed)
-        ? parsed
-        : parsed && typeof parsed === "object"
-          ? ((Object.values(parsed as Record<string, unknown>).find(Array.isArray) as unknown[] | undefined) ?? [])
-          : [];
-      const safe: Verdict[] = list
-        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
-        .map((r) => {
-          const v = String(r["verdict"] ?? "").toLowerCase();
-          return {
-            compartment: String(r["compartment"] ?? "?"),
-            verdict: (v === "taken" || v === "mismatch" ? v : "still full") as Verdict["verdict"],
-            ...(r["note"] != null ? { note: typeof r["note"] === "string" ? r["note"] : JSON.stringify(r["note"]) } : {}),
-          };
-        });
-      if (safe.length === 0) throw new Error("Muse Spark didn't return a readable verdict. Please try again.");
-      setRows(safe);
+      const prompt = `${samLine}\n\nMedication list (AM pills go in AM compartments, PM in PM): ${MED_LIST.join(", ")}. Today is Thursday evening. The organizer has exactly these 14 compartments, in this order: ${COMPARTMENTS.join(", ")}. For every compartment decide: "taken" (empty and its time has passed), "still full" (holds the right pills), or "mismatch" (wrong count/missing pill, or full when it should have been taken). Reply with ONLY a JSON array containing exactly 14 objects, one per compartment, in that order, each shaped {"compartment": "Thu AM", "verdict": "taken" | "still full" | "mismatch", "note": "short note"}. No prose, no wrapping object.`;
+      let out = await callMeta("muse-spark-1.3", [image, { type: "text", text: prompt }]);
+      let parsedRows = toRows(out);
+      if (!parsedRows) {
+        setStep("Muse Spark is tidying its answer…");
+        out = await callMeta("muse-spark-1.3", [
+          image,
+          { type: "text", text: `${prompt}\n\nYour previous answer was not in the required format:\n${out.slice(0, 6000)}\n\nReturn ONLY the JSON array of 14 objects, one per compartment (${COMPARTMENTS.join(", ")}), in that order.` },
+        ]);
+        parsedRows = toRows(out);
+      }
+      if (parsedRows) { setRows(parsedRows); setRaw(""); }
+      else { setRows([]); setRaw(out); }
       setState("done");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -137,8 +150,9 @@ export function PillCheck() {
         {state === "error" && <ErrorBox message={err} />}
         {state === "done" && (
           <div className="rounded-3xl bg-card p-6 shadow-soft">
-            <h3 className="text-lg font-bold">Verdict</h3>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <h3 className="text-lg font-bold">{raw ? "Muse Spark's read" : "Verdict"}</h3>
+            {raw && <p className="mt-3 whitespace-pre-wrap text-sm">{raw}</p>}
+            {!raw && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {rows.map((r) => (
                 <div key={r["compartment"]} title={r["note"]} className={`rounded-xl p-3 text-sm ${r["verdict"] === "taken" ? "bg-success text-success-foreground" : r["verdict"] === "mismatch" ? "bg-destructive text-destructive-foreground" : "bg-warning text-warning-foreground"}`}>
                   <div className="font-bold">{r["compartment"]}</div>
@@ -146,10 +160,10 @@ export function PillCheck() {
                   {r["note"] && <div className="mt-1 text-xs opacity-80">{r["note"]}</div>}
                 </div>
               ))}
-            </div>
+            </div>}
             {sam && ("error" in sam
               ? <p className="mt-3 text-xs text-destructive">SAM 3.1 error: {sam.error}</p>
-              : <p className="mt-3 text-xs text-muted-foreground">SAM 3.1 (Responses API) found {sam.pills < 0 ? "an unparsed number of" : sam.pills} pill regions and {sam.comps < 0 ? "an unparsed number of" : sam.comps} compartments in this image.</p>)}
+              : <p className="mt-3 text-xs text-muted-foreground">SAM 3.1 (Responses API) found {sam.pills < 0 ? "an unparsed number of" : sam.pills} pill regions in this image.</p>)}
           </div>
         )}
       </div>
