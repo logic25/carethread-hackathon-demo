@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-type MetaInput = { model: string; system?: string; messages: unknown[] };
+type MetaInput = { model: string; system?: string | undefined; messages: unknown[] };
 
 // Server-side proxy to the Meta Model API. The key lives only in the server secret META_API_KEY.
 export const metaProxy = createServerFn({ method: "POST" })
@@ -9,7 +9,7 @@ export const metaProxy = createServerFn({ method: "POST" })
     return d;
   })
   .handler(async ({ data }) => {
-    const key = process.env.META_API_KEY;
+    const key = process.env["META_API_KEY"];
     if (!key) return { ok: false as const, error: "META_API_KEY is not set on the server." };
     const res = await fetch("https://api.meta.ai/v1/messages", {
       method: "POST",
