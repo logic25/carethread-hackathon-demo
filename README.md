@@ -1,50 +1,50 @@
-# Carethread Hackathon Demo
+# CareThread — family care follow-through
 
-Build a web app called "CareThread" — a family care follow-through demo built on the Meta Model API for a hackathon. Fully fictional demo data only. Single-page app, warm and calm design (soft cream background, deep teal and warm amber accents, rounded cards, big readable type — it should feel like a family tool, not a hospital system).
+CareThread is a family care follow-through loop: nothing a family agrees to do for a parent or an aging loved one quietly dies in a group chat.
 
-CONCEPT: Adult siblings coordinating care for their mother drop commitments into a group chat and they quietly die there. CareThread is the loop that catches them: it shows every commitment, detects what is aging, states what is blocking each one, proposes the next move, and writes every proposed action to a CONSENT LEDGER — no action runs on a family member's behalf without a recorded approval. A rejected action visibly does not run.
+**Live demo:** https://carethread-hackathon-demo.lovable.app
+**Demo video:** https://youtu.be/XwvWmsla0F0
 
-FICTIONAL FAMILY (seed data, hardcode it): Rosa Delgado, 78. Her adult children: Ana, Miguel, Carla. All fictional, label the app "Demo — fictional family" in the header.
+Built for the Meta Global AI Developer Hackathon (Cerebral Valley), Indie Developer Track, "Build for Your World." Every person and every piece of data in this demo is fictional.
 
-THE BOARD: 9 commitment cards, each with: title, owner (which sibling), category, days aging (computed), status (On track / Aging / Stuck / Done), what is blocking it, and the proposed next action.
-1. Pharmacy refill — Rosa's heart medication, Miguel promised Monday, pharmacy hasn't confirmed ready. 4 days aging. Blocked: no pharmacy confirmation. Proposed: Cora calls the pharmacy to confirm the refill is ready.
-2. Cardiology follow-up — Ana to book after last visit, no date exists. 11 days. Blocked: nobody called the office. Proposed: Cora calls the cardiology office and books the first morning slot.
-3. Home-energy assistance (HEAP) application — Carla started it, missing the income letter, due Friday. Blocked: missing document. Proposed: Cora drafts the request for the income letter.
-4. Lab results — doctor's office said results would post, nobody checked. 6 days. Blocked: unchecked portal. Proposed: Cora checks the portal and summarizes.
-5. Ride to Thursday appointment — Miguel offered, appointment time changed and he doesn't know. Blocked: stale information. Proposed: Cora messages Miguel the new time and confirms.
-6. Shower chair — Ana ordered it, supplier never confirmed delivery. Blocked: no delivery date. Proposed: Cora calls the supplier for a delivery date.
-7. Insurance card to clinic — Carla was to send the new card photo, never sent. Blocked: not sent. Proposed: Cora sends the card photo to the clinic portal.
-8. Update for their aunt — three drafts of a health update, none sent. 9 days. Blocked: family can't agree on wording. Proposed: Cora drafts one calm version for approval.
-9. Nurse home visit — a visit window was offered for next week, nobody replied. Blocked: no reply. Proposed: Cora accepts the Tuesday window and tells the family.
+## The problem
 
-THE CONSENT LEDGER (a main view, tab or prominent panel): a table of every proposed action with columns: Action, Evidence (why: which commitment, how long aging), Cost (e.g. "one phone call", "no cost", "$0 — covered"), Proposed by (Cora), and an Approve / Reject control per sibling. Approving marks the action Approved and moves its commitment toward Done with a "completed" animation/state. Rejecting marks it Rejected and shows clearly "This action will not run." Keep a count header: X approved, Y rejected, Z waiting.
+63 million Americans care for an adult family member or aging loved one (AARP and the National Alliance for Caregiving, Caregiving in the US 2025). That care is coordinated in group chats, where commitments quietly die: a pharmacy pickup nobody confirmed, a cardiology follow-up nobody booked, a benefits form nobody filed.
 
-META MODEL API INTEGRATION (the core of the hackathon entry): Add a Settings dialog (gear icon, header) "Connect Meta Model API" with one password field for the API key, stored in localStorage, never displayed after entry. All AI features call https://api.meta.ai/v1/messages with header Authorization: Bearer <key>, using model "muse-spark-1.3" for text/vision reasoning and "sam-3.1" for image segmentation. Build three working features:
-A. "Run the loop" button: sends the 9 commitments to Muse Spark and returns, per commitment: what changed since last check, what is blocking it, and the single next question to ask the family. Render the response as structured cards. If the API call fails or no key is set, show a clean empty/error state explaining a key is needed (Settings) — do not fake a response.
-B. "One sentence, whole outcome" panel: a button that sends the whole board to Muse Spark and displays the single sentence it returns as the family's plan for the week, large and prominent (e.g. a hero card at the top of the board after running).
-C. "Pill organizer check" panel: an upload area for a photo of a weekly pill organizer plus the med list (Rosa's fictional list: Metoprolol AM, Lisinopril AM, Vitamin D AM, Donepezil PM). On run: send the image to sam-3.1 with a text prompt to segment the compartments, then send the result to muse-spark-1.3 to read which compartments still hold pills and match against the med list, and render a simple verdict grid: compartment by compartment, taken / still full / mismatch. Include a built-in sample pill-organizer photo (draw it as an SVG/illustration or a CSS grid mock labeled as a sample image) so the demo works without a camera. If no API key, show the same honest key-needed state.
+## What it does
 
-Keep the whole thing client-side (no database). Speed matters: build it in one pass, polished but not gold-plated. Header: "CareThread" wordmark, the fictional-family label, Settings gear, and a small line: "Built on the Meta Model API — Muse Spark + SAM 3.1."
+- **One thread per loved one.** Every loved one gets their own thread. This demo follows Rosa Delgado, 78, and her children Ana, Miguel, and Carla.
+- **The board.** Every commitment in the thread, with its owner, how many days it has been aging, what is blocking it, and the proposed next move.
+- **The consent ledger.** Every proposed action is written to a ledger with its evidence and its cost. A sibling approves or rejects it. An approved action runs; a rejected action visibly does not run. Nothing happens on a family member's behalf without a recorded yes.
+- **One sentence, whole outcome.** Muse Spark reads the whole board and writes the family's week as a single sentence.
+- **Pill organizer check.** A photo of the weekly organizer is segmented by SAM 3.1, then read by Muse Spark against the medication list, compartment by compartment.
 
-This project was built with [Lovable](https://lovable.dev).
+## How it uses Meta models
 
-**Live app**: https://carethread-hackathon-demo.lovable.app
+| Job | Model | Endpoint |
+| --- | --- | --- |
+| Commitment analysis ("Run the loop") and the one-sentence plan | Muse Spark (muse-spark-1.3) | POST /v1/messages |
+| Pill organizer segmentation | SAM 3.1 (sam-3.1) | POST /v1/responses |
 
-## Build with Lovable
+## Architecture and safety
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/a4c0c3fd-d13c-4888-bf3e-380034aa402b).
+- The Meta Model API key exists only as a server-side secret (META_API_KEY). Every model call runs through a server function; the key is never shipped to or stored in the browser.
+- No database and no real data: the demo family, the medications, and the sample organizer image are invented for this hackathon.
+- A rejected action does not run. That rule is the product.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+## Where this goes next
 
-## Development
+In the production CareThread, Cora, the care agent, carries out approved actions herself, including placing the call to the pharmacy or the doctor's office. This demo is the record layer that makes those calls safe: the thread, the ledger, and the recorded yes.
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Run it locally
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
+```
 npm i
 npm run dev
 ```
+
+The AI features need the META_API_KEY secret configured in the project backend; without it, the app shows an honest key-needed state instead of a fake result.
+
+## Stack
+
+React with TanStack Start, built with Lovable, server functions backed by the project's Supabase backend, Meta Model API.

@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { callMeta, extractJson, MED_LIST } from "@/lib/carethread";
+import { samSegment } from "@/lib/meta.functions";
 import { ErrorBox } from "@/components/States";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -50,19 +51,39 @@ export function PillCheck() {
   const [err, setErr] = useState("");
   const [step, setStep] = useState("");
   const [rows, setRows] = useState<Verdict[]>([]);
+  const [sam, setSam] = useState<{ pills: number; comps: number } | { error: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const run = async () => {
     setState("loading");
+    setSam(null);
     try {
       const data = await toPngBase64(src);
       const image = { type: "image" as const, source: { type: "base64" as const, media_type: "image/png", data } };
       setStep("SAM 3.1 is segmenting the compartments…");
-      const seg = await callMeta("sam-3.1", [image, { type: "text", text: "Segment each individual compartment of this weekly pill organizer (day x AM/PM) and the pills inside each compartment. Return masks/boxes with labels." }]);
+      const imageDataUrl = "data:image/png;base64," + data;
+      let samLine = "";
+      try {
+        const pills = await samSegment({ data: { imageDataUrl, concept: "pill" } });
+        if (!pills.ok) throw new Error(pills.error);
+        const comps = await samSegment({ data: { imageDataUrl, concept: "pill organizer compartment" } });
+        if (!comps.ok) throw new Error(comps.error);
+        if (pills.count === -1 || comps.count === -1) {
+          const raw = [pills, comps].map((r) => ("rawText" in r ? r.rawText : `${r.count} regions`)).join("\n");
+          samLine = `SAM 3.1 segmentation (Responses API) raw output:\n${raw.slice(0, 4000)}`;
+          setSam({ pills: pills.count, comps: comps.count });
+        } else {
+          samLine = `SAM 3.1 segmentation (Responses API): found ${pills.count} pill regions and ${comps.count} organizer compartments.`;
+          setSam({ pills: pills.count, comps: comps.count });
+        }
+      } catch (e) {
+        setSam({ error: e instanceof Error ? e.message : String(e) });
+        samLine = "SAM 3.1 segmentation was unavailable for this image.";
+      }
       setStep("Muse Spark is reading each compartment…");
       const out = await callMeta("muse-spark-1.3", [
         image,
-        { type: "text", text: `SAM 3.1 segmentation result:\n${seg.slice(0, 6000)}\n\nMedication list (AM pills go in AM compartments, PM in PM): ${MED_LIST.join(", ")}. Today is Thursday evening. For every compartment decide: "taken" (empty and its time has passed), "still full" (holds the right pills), or "mismatch" (wrong count/missing pill, or full when it should have been taken). Reply ONLY JSON: [{"compartment":"Sun AM","verdict":"taken","note":"..."}]` },
+        { type: "text", text: `${samLine}\n\nMedication list (AM pills go in AM compartments, PM in PM): ${MED_LIST.join(", ")}. Today is Thursday evening. For every compartment decide: "taken" (empty and its time has passed), "still full" (holds the right pills), or "mismatch" (wrong count/missing pill, or full when it should have been taken). Reply ONLY JSON: [{"compartment":"Sun AM","verdict":"taken","note":"..."}]` },
       ]);
       setRows(extractJson<Verdict[]>(out));
       setState("done");
@@ -108,6 +129,9 @@ export function PillCheck() {
                 </div>
               ))}
             </div>
+            {sam && ("error" in sam
+              ? <p className="mt-3 text-xs text-destructive">SAM 3.1 error: {sam.error}</p>
+              : <p className="mt-3 text-xs text-muted-foreground">SAM 3.1 (Responses API) found {sam.pills < 0 ? "an unparsed number of" : sam.pills} pill regions and {sam.comps < 0 ? "an unparsed number of" : sam.comps} compartments in this image.</p>)}
           </div>
         )}
       </div>
