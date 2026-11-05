@@ -67,8 +67,7 @@ export function PillCheck() {
       setRows(extractJson<Verdict[]>(out));
       setState("done");
     } catch (e) {
-      if (e instanceof NoKeyError) setState("nokey");
-      else { setErr(e instanceof Error ? e.message : String(e)); setState("error"); }
+      { setErr(e instanceof Error ? e.message : String(e)); setState("error"); }
     }
   };
 
