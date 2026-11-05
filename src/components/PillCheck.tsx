@@ -69,6 +69,25 @@ function toRows(text: string): Verdict[] | null {
   return COMPARTMENTS.map((c) => byName.get(c)!);
 }
 
+// callMeta falls back to the whole JSON body when Spark returns no text blocks
+// (e.g. only encoded thinking blocks). Keep only real text parts.
+function sparkText(out: string): string {
+  try {
+    const j = JSON.parse(out) as { content?: { type?: string; text?: unknown }[] };
+    if (j && typeof j === "object" && Array.isArray(j.content)) {
+      return j.content.filter((c) => c && c.type === "text" && typeof c.text === "string").map((c) => c.text as string).join("");
+    }
+  } catch { /* plain text */ }
+  return out;
+}
+
+const UNREADABLE = "Muse Spark did not return a readable verdict for this image.";
+function readable(text: string): string {
+  const t = text.trim();
+  if (!t || /[A-Za-z0-9+/_=-]{80,}/.test(t)) return UNREADABLE;
+  return t;
+}
+
 export function PillCheck() {
   const [src, setSrc] = useState(SAMPLE_URL);
   const [isSample, setIsSample] = useState(true);
@@ -93,7 +112,7 @@ export function PillCheck() {
         const pills = await samSegment({ data: { imageDataUrl, concept: "pill" } });
         if (!pills.ok) throw new Error(pills.error);
         if (pills.count === -1) {
-          samLine = `SAM 3.1 segmentation (Responses API) raw output:\n${("rawText" in pills ? pills.rawText : "").slice(0, 4000)}`;
+          samLine = "SAM 3.1 segmentation (Responses API) ran, but its pill count could not be parsed.";
         } else {
           samLine = `SAM 3.1 segmentation (Responses API): found ${pills.count} pill regions.`;
         }
@@ -104,18 +123,18 @@ export function PillCheck() {
       }
       setStep("Muse Spark is reading each compartment…");
       const prompt = `${samLine}\n\nMedication list (AM pills go in AM compartments, PM in PM): ${MED_LIST.join(", ")}. Today is Thursday evening. The organizer has exactly these 14 compartments, in this order: ${COMPARTMENTS.join(", ")}. For every compartment decide: "taken" (empty and its time has passed), "still full" (holds the right pills), or "mismatch" (wrong count/missing pill, or full when it should have been taken). Reply with ONLY a JSON array containing exactly 14 objects, one per compartment, in that order, each shaped {"compartment": "Thu AM", "verdict": "taken" | "still full" | "mismatch", "note": "short note"}. No prose, no wrapping object.`;
-      let out = await callMeta("muse-spark-1.3", [image, { type: "text", text: prompt }]);
+      let out = sparkText(await callMeta("muse-spark-1.3", [image, { type: "text", text: prompt }], undefined, 4000));
       let parsedRows = toRows(out);
       if (!parsedRows) {
         setStep("Muse Spark is tidying its answer…");
-        out = await callMeta("muse-spark-1.3", [
+        out = sparkText(await callMeta("muse-spark-1.3", [
           image,
           { type: "text", text: `${prompt}\n\nYour previous answer was not in the required format:\n${out.slice(0, 6000)}\n\nReturn ONLY the JSON array of 14 objects, one per compartment (${COMPARTMENTS.join(", ")}), in that order.` },
-        ]);
+        ], undefined, 4000));
         parsedRows = toRows(out);
       }
       if (parsedRows) { setRows(parsedRows); setRaw(""); }
-      else { setRows([]); setRaw(out); }
+      else { setRows([]); setRaw(readable(out)); }
       setState("done");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
