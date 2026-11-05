@@ -65,7 +65,7 @@ async function samSegmentInner(data: SamInput): Promise<SamResult> {
         .flatMap((o) => (o.content ?? []).filter((c) => c.type === "output_text").map((c) => c.text ?? ""))
         .join("");
     } catch {
-      return { ok: true, count: -1, rawText: body };
+      return { ok: true, count: -1, rawText: body.slice(0, 4000) };
     }
     try {
       const { parseImageStream, recordsOfKind } = await import("@meta-sam/parser");
@@ -79,16 +79,17 @@ async function samSegmentInner(data: SamInput): Promise<SamResult> {
       for await (const _ of parsed) { /* drain */ }
       const result = await parsed.finalResult;
       const boxRecords = recordsOfKind(result.records, "box");
-      if (boxRecords.length === 0 && rawText.includes("<|box")) return { ok: true, count: -1, rawText };
+      if (boxRecords.length === 0 && rawText.includes("<|box")) return { ok: true, count: -1, rawText: rawText.slice(0, 4000) };
       const size = rawText.match(/;w=(\d+);h=(\d+)/);
       const w = size ? Number(size[1]) : 1000, h = size ? Number(size[2]) : 1000;
       const n = (v: number, d: number) => Math.round((v / (d || 1)) * 1000);
       const boxes: SamBox[] = boxRecords.map((b) => ({
-        objectId: b.objectId, x1: n(b.left, w), y1: n(b.top, h), x2: n(b.right, w), y2: n(b.bottom, h),
-        ...(b.confidence !== undefined ? { confidence: b.confidence } : {}),
+        objectId: String(b.objectId), x1: n(b.left, w), y1: n(b.top, h), x2: n(b.right, w), y2: n(b.bottom, h),
+        ...(b.confidence !== undefined ? { confidence: Number(b.confidence) } : {}),
       }));
       return { ok: true, count: boxes.length, boxes };
     } catch {
-      return { ok: true, count: -1, rawText };
+      return { ok: true, count: -1, rawText: rawText.slice(0, 4000) };
     }
-  });
+  }
+}
